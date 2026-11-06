@@ -1,0 +1,201 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  LEADER
+  ASSISTANT
+  HR
+  AGENT
+}
+
+enum CampaignPlatform {
+  INSTAGRAM
+  TIKTOK
+  FACEBOOK
+  WHATSAPP
+  OTHER
+}
+
+enum TargetFunnel {
+  RECRUITMENT
+  CLIENT
+}
+
+enum LeadType {
+  RECRUITMENT
+  CLIENT
+}
+
+enum DocumentStatus {
+  SSN_WORK_PERMIT
+  ITIN
+  NONE
+  NOT_APPLICABLE
+}
+
+enum QualificationStatus {
+  QUALIFIED_HIGH
+  QUALIFIED_ITIN
+  PENDING_ITIN_CHECK
+  DISQUALIFIED_DOCS
+  CLIENT_LEAD
+}
+
+enum LeadStage {
+  POOL
+  CONTACTED_WEBINAR_SENT
+  WEBINAR_WATCHED
+  READY_FOR_HR
+  HR_INTERVIEWED
+  ENROLLED_LICENSING
+  ACTIVE_AGENT
+  CLIENT_NEW
+  CLIENT_ASSIGNED
+  CLIENT_CLOSED
+  DISCARDED
+}
+
+enum ActivityActionType {
+  CREATED
+  CALL_ATTEMPT
+  WHATSAPP_SENT
+  STAGE_CHANGE
+  WEBINAR_PROGRESS
+  HR_NOTE
+  ASSIGNED_TO_AGENT
+}
+
+enum ItinRuleStatus {
+  ALLOWED
+  REQUIRES_CHECK
+  NOT_ALLOWED
+}
+
+model LeaderProfile {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  fullName        String
+  title           String   @default("Executive Agency Director")
+  agencyName      String   @default("Carta Business Group | Globe Life")
+  whatsappNumber  String
+  email           String?
+  bio             String?  @db.Text
+  webinarVideoUrl String   @default("https://www.youtube.com/embed/dQw4w9WgXcQ")
+  webinarTitle    String   @default("Presentación Oficial de Carrera y Negocio — Carta Business Group")
+  heroHeadline    String   @default("Construye una Carrera Empresarial en la Industria Financiera de EE. UU.")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  users             User[]
+  campaigns         Campaign[]
+  leads             Lead[]
+  whatsappTemplates WhatsappTemplate[]
+  itinJurisdictions ItinJurisdiction[]
+}
+
+model User {
+  id           String        @id @default(cuid())
+  leaderId     String
+  leader       LeaderProfile @relation(fields: [leaderId], references: [id], onDelete: Cascade)
+  name         String
+  email        String        @unique
+  passwordHash String
+  phone        String?
+  role         UserRole      @default(AGENT)
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+
+  assignedLeads Lead[]         @relation("AssignedAgent")
+  activities    LeadActivity[]
+}
+
+model Campaign {
+  id           String           @id @default(cuid())
+  leaderId     String
+  leader       LeaderProfile    @relation(fields: [leaderId], references: [id], onDelete: Cascade)
+  code         String           @unique
+  name         String
+  platform     CampaignPlatform @default(INSTAGRAM)
+  targetFunnel TargetFunnel     @default(RECRUITMENT)
+  clicksCount  Int              @default(0)
+  createdAt    DateTime         @default(now())
+
+  leads Lead[]
+}
+
+model Lead {
+  id                   String              @id @default(cuid())
+  leaderId             String
+  leader               LeaderProfile       @relation(fields: [leaderId], references: [id], onDelete: Cascade)
+  campaignId           String?
+  campaign             Campaign?           @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  leadType             LeadType            @default(RECRUITMENT)
+  firstName            String
+  lastName             String
+  phone                String
+  email                String?
+  state                String
+  city                 String?
+  documentStatus       DocumentStatus      @default(NONE)
+  qualification        QualificationStatus @default(QUALIFIED_HIGH)
+  stage                LeadStage           @default(POOL)
+  callAttempts         Int                 @default(0)
+  webinarOpenedAt      DateTime?
+  webinarWatchPct      Int                 @default(0)
+  requestedHrInterview Boolean             @default(false)
+  quizAnswers          Json?
+  hrChecklist          Json?
+  assignedAgentId      String?
+  assignedAgent        User?               @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  notes                String?             @db.Text
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  activities LeadActivity[]
+
+  @@index([leaderId, leadType, stage])
+  @@index([phone])
+}
+
+model LeadActivity {
+  id          String             @id @default(cuid())
+  leadId      String
+  lead        Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  actionType  ActivityActionType
+  description String             @db.Text
+  createdAt   DateTime           @default(now())
+
+  @@index([leadId, createdAt])
+}
+
+model WhatsappTemplate {
+  id           String        @id @default(cuid())
+  leaderId     String
+  leader       LeaderProfile @relation(fields: [leaderId], references: [id], onDelete: Cascade)
+  name         String
+  targetRole   UserRole      @default(ASSISTANT)
+  triggerStage LeadStage     @default(POOL)
+  body         String        @db.Text
+  createdAt    DateTime      @default(now())
+}
+
+model ItinJurisdiction {
+  id        String         @id @default(cuid())
+  leaderId  String
+  leader    LeaderProfile  @relation(fields: [leaderId], references: [id], onDelete: Cascade)
+  stateCode String
+  stateName String
+  cityNotes String?
+  status    ItinRuleStatus @default(ALLOWED)
+
+  @@unique([leaderId, stateCode])
+}
+
